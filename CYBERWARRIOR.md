@@ -11,9 +11,10 @@ Projeto para levar Mega Man Battle Network (USA) a um port nativo de 3DS, no est
 
 ## Base ROM
 
-A ROM nunca entra neste repositório nem em artifacts do Actions. O CI busca `base.gba` no repositório
-privado `lordMagmoon/cyberwarrior-3ds-rom` usando o secret `BASE_ROM_TOKEN`
-(token fine-grained, somente leitura de *Contents*, só naquele repositório).
+A ROM nunca entra neste repositório nem em artifacts do Actions. A comparação byte a byte roda
+**dentro do repositório privado** `lordMagmoon/cyberwarrior-3ds-rom` (workflow `matching-check`): ele
+baixa este fork (público), compila e compara com a ROM que está lá. Não precisa de token.
+O job `matching` deste fork só compila (o `BASE_ROM_TOKEN` é opcional e não está configurado).
 
 ## Estratégia
 
@@ -91,3 +92,11 @@ validação oficial é sempre o CI com a imagem `devkitpro/devkitarm`. `gbafix` 
 3. Vídeo: `Video_ApplySettings`, `Video_BlitScreens`, `BgUpdate_*`.
 4. Roteiros novos: primeira batalha (para cobrir RNG em batalha e a Custom Screen depois).
 5. Gerar thunks automaticamente a partir de uma lista (hoje são escritos à mão em `thunks.S`).
+- **2026-11-15** — Comparação byte a byte movida para o repositório privado (sem token).
+  **Achado: o projeto upstream não casa com a ROM em nenhum devkitARM testado** (2025-07 a 2026-02:
+  ~768 mil bytes diferentes). A causa é o `m4a.c` (driver de som do SDK): a ROM original foi
+  compilada com o **agbcc** (a `MidiKeyToFreq` da ROM é idêntica à saída do `agbcc -O2`), e o
+  upstream compila com o GCC moderno, que gera outro tamanho e desloca tudo depois dele.
+  Com o agbcc do pret, ~27 das 54 funções do `m4a.c` já batem byte a byte; as outras diferem
+  porque o `m4a.c` do pret é de outra versão do SDK. O `make check` do upstream não acusa isso
+  porque o `|| quick_comp` engole o erro.
