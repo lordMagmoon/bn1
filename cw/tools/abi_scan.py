@@ -248,7 +248,9 @@ def report(img, fname):
         verdict.append(f"needs entry shim for inputs {sorted(extra_in)}")
     if risky:
         verdict.append(f"callers rely on {sorted(risky)} after return")
-    print("   verdict: " + ("; ".join(verdict) if verdict else "C-safe (AAPCS-compatible at all call sites)"))
+    if not sites:
+        verdict.append("NO direct bl call sites found (called indirectly?): check callers by hand")
+    print("   verdict: " + ("; ".join(verdict) if verdict else f"C-safe (AAPCS-compatible at all {len(sites)} call sites)"))
     return {"name": fname, "inputs": inputs, "writes": writes, "sites": len(sites), "risky": risky, "extra_in": extra_in}
 
 
@@ -274,7 +276,7 @@ def main():
         if r:
             rows.append(r)
     if a.all:
-        safe = sum(1 for r in rows if not r["risky"] and not r["extra_in"])
+        safe = sum(1 for r in rows if not r["risky"] and not r["extra_in"] and r["sites"])
         print(f"functions: {len(rows)}  C-safe as-is: {safe}  need shim/care: {len(rows) - safe}")
     if a.csv:
         with open(a.csv, "w", newline="") as f:

@@ -30,5 +30,6 @@ if diff -q "$OUT/asm.crc" "$OUT/c.crc" >/dev/null; then
   echo "FUNCTIONAL OK: $FRAMES frames identical"
 else
   echo "::error::FUNCTIONAL build diverges, first differing frame: $(diff "$OUT/asm.crc" "$OUT/c.crc" | grep '^>' | head -1)"
+  python3 cw/tools/crc_lag.py "$OUT/asm.crc" "$OUT/c.crc" || true
   exit 1
 fi
