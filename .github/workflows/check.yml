@@ -61,3 +61,18 @@ jobs:
       - name: Without ROM token
         if: env.HAS_ROM_TOKEN != 'true'
         run: echo "::warning::BASE_ROM_TOKEN not set — built only, no comparison against the base ROM."
+
+  shift:
+    name: Shift test (code moved by 0x100 must play identically)
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends python3-venv python3-pip g++ gcc make libmgba-dev zlib1g-dev
+      - name: Build framecmp
+        run: gcc -O2 -o /usr/local/bin/framecmp cw/framecmp/framecmp.c -lmgba -lz
+      - name: Shift test
+        run: cw/scripts/shift_test.sh cw/movies/boot_newgame.txt 1200

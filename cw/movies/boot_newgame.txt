@@ -1,0 +1,8 @@
+# Boot, skip splash/title, start a new game and let the intro play.
+# start len keys
+300 4 START
+420 4 START
+520 4 A
+600 4 A
+700 4 A
+800 4 A
