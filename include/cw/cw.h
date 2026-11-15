@@ -6,6 +6,9 @@
  *
  * Calling convention notes (see CYBERWARRIOR.md and cw/tools/abi_scan.py):
  *  - C is compiled with -ffixed-r10: r10 always holds &MainState for the assembly.
+ *  - C is compiled with -std=gnu17 so that mmbn.h's "bool" stays a plain byte: the game's
+ *    flags are bytes that may hold values other than 0/1 (found by difftest on
+ *    FadeSettings.isFadeActive == 2 with the C23 default of newer GCC).
  *  - Assembly functions do NOT preserve r4-r11. C must call them through the
  *    cw_asm_<name> thunks from source/cw/thunks.S, which save and restore r4-r11.
  */

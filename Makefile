@@ -37,7 +37,9 @@ ASFLAGS				:= $(ARCH) -mcpu=arm7tdmi
 # (source/cw/). The default build (FUNCTIONAL=0) is the byte-identical ROM.
 FUNCTIONAL			?= 0
 ifeq ($(FUNCTIONAL),1)
-CFLAGS				+= -DFUNCTIONAL=1 -ffixed-r10
+# -std=gnu17: mmbn.h types "bool" as a byte (the game stores 0/1/2... in them); in C23 bool
+# would become _Bool and comparisons like (x == 1) would silently change meaning.
+CFLAGS				+= -DFUNCTIONAL=1 -ffixed-r10 -std=gnu17
 SDEFINES			:= -D FUNCTIONAL=1
 endif
 LDFLAGS				:= -nostdlib -T $(MAIN_LD_SCRIPT) -Wl,-Map=$(BUILD)/$(TARGET).map

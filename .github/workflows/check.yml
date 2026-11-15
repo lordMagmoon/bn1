@@ -75,7 +75,7 @@ jobs:
       - name: Build framecmp
         run: gcc -O2 -o /usr/local/bin/framecmp cw/framecmp/framecmp.c -lmgba -lz
       - name: Shift test
-        run: cw/scripts/shift_test.sh cw/movies/boot_newgame.txt 1200
+        run: cw/scripts/shift_test.sh cw/movies/intro_room.txt 4300
 
   functional:
     name: Functional build (C) must behave like the asm build
@@ -91,4 +91,4 @@ jobs:
       - name: Build framecmp
         run: gcc -O2 -o /usr/local/bin/framecmp cw/framecmp/framecmp.c -lmgba -lz
       - name: Functional test
-        run: PATH="$DEVKITARM/bin:$PATH" cw/scripts/functional_test.sh cw/movies/boot_newgame.txt 1200
+        run: PATH="$DEVKITARM/bin:$PATH" cw/scripts/functional_test.sh cw/movies/intro_room.txt 4300
