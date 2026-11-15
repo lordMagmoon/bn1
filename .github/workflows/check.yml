@@ -1,0 +1,63 @@
+name: build-and-check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  matching:
+    name: Build (asm) and compare with base ROM
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm:latest
+    env:
+      HAS_ROM_TOKEN: ${{ secrets.BASE_ROM_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Python venv
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends python3-venv python3-pip g++ make
+
+      # The base ROM lives in a PRIVATE repo and is never committed here or uploaded as an artifact.
+      - name: Fetch base ROM (private repo)
+        if: env.HAS_ROM_TOKEN == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: lordMagmoon/cyberwarrior-3ds-rom
+          token: ${{ secrets.BASE_ROM_TOKEN }}
+          path: _rom
+
+      - name: Place base ROM
+        if: env.HAS_ROM_TOKEN == 'true'
+        run: |
+          mkdir -p base
+          cp _rom/base/base.gba base/base.gba
+          rm -rf _rom
+          echo "9ff40cf640575211202b7bda5487abbb  base/base.gba" | md5sum -c -
+
+      - name: Build
+        run: python3 build.py
+
+      - name: Compare with base ROM (fails on any difference)
+        if: env.HAS_ROM_TOKEN == 'true'
+        run: |
+          if cmp -s base/base.gba build/mmbn.gba; then
+            echo "MATCH: build/mmbn.gba is identical to the base ROM"
+          else
+            echo "::error::Build differs from base ROM"
+            .venv/bin/python tools/quick_comp.py -c 50 base/base.gba build/mmbn.gba
+            exit 1
+          fi
+
+      - name: Progress
+        if: always()
+        run: .venv/bin/python tools/progress.py -mp build/mmbn.map || true
+
+      - name: Without ROM token
+        if: env.HAS_ROM_TOKEN != 'true'
+        run: echo "::warning::BASE_ROM_TOKEN not set — built only, no comparison against the base ROM."
