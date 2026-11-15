@@ -49,11 +49,13 @@ _ts memcpy_16
 @@ r0: void* ptr - Pointer to the memory block.
 @@ r1: int num - The number of bytes to set.
 @@ r2: short val - The value to set.
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/utility.c */
 _ts memset_16
 1:  sub        r1,#0x2
     strh       r2,[r0,r1]
     bne        1b
     mov        pc,lr
+#endif
 
 
 @@ Sets a number of bytes in a block of memory to the given value 4 bytes at
@@ -75,12 +77,14 @@ _ts memset_32
 @@ r0: void* src - Pointer to the source memory block.
 @@ r1: void* dst - Pointer to the destination memory block.
 @@ r2: int num - Number of bytes to copy.
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/utility.c */
 _ts memcpy_8
 1:  sub        r2,#0x1
     ldrb       r3,[r0,r2]
     strb       r3,[r1,r2]
     bne        1b
     mov        pc,lr
+#endif
 
 
 @@ Sets a number of bytes in a block of memory to the given value 1 byte at
@@ -158,6 +162,7 @@ LAB_08000aac:
 @@ - 10 -> 0x10
 @@ - 19 -> 0x19
 @@ - 64 -> 0x64
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/utility.c */
 _ts ConvertNumToBCD
     ldr        r1,=99999999
     cmp        r0,r1
@@ -185,6 +190,7 @@ LAB_08000adc:
     bne        LAB_08000acc
     add        r0,r2,#0x0
     mov        pc,lr
+#endif
 
     .align 2, 0
 
@@ -213,6 +219,7 @@ PTR_powersOf10_08000b08:
 @@ 0x64 -> 2
 @@ 0x100 -> 3
 @@ 0x4092 -> 4
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/utility.c */
 _ts GetWidthOfBcdNumber
     push       {lr}
     mov        r1,#0x1
@@ -228,6 +235,7 @@ LAB_08000b1e:
 LAB_08000b28:
     add        r0,r1,#0x0
     pop        {pc}
+#endif
 
 
 @@ Shuffles a given array by randomly exchanging elements.
@@ -235,6 +243,7 @@ LAB_08000b28:
 @@ r0: [in, out] void* array - The array to shuffle.
 @@ r1: arraySz - The length of the array.
 @@ r2: shuffleCount - The amount of times to shuffle the array.
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/utility.c */
 _ts ArrayShuffle
     push       {r5,lr}
 .loop:
@@ -261,6 +270,7 @@ _ts ArrayShuffle
     sub        r2,#0x1
     bne        .loop
     pop        {r5,pc}
+#endif
 
 
 @@ Picks a random element from a given array.
@@ -269,6 +279,7 @@ _ts ArrayShuffle
 @@ r1: int arraySz - The length of the array.
 @@ Out:
 @@ r0: byte val - A randomly chosen value from the array.
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/utility.c */
 _ts GetRandomElementOfArray
     push       {lr}
     add        r7,r0,#0x0
@@ -278,6 +289,7 @@ _ts GetRandomElementOfArray
     bl         Div
     ldrb       r0,[r7,r1]
     pop        {pc}
+#endif
 
 
 @@ Sorts a given array in descending order.
@@ -373,6 +385,7 @@ ptrTimeConsts:  .word timeConsts
 
 
 @@ Increments the game timer, capping it at 99 hours and 59 minutes.
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/utility.c */
 _ts IncrementGameTimer
     LoadMain gameStats, r7, r7
     ldr        r0,[r7,#GameStats_gameTimer]
@@ -386,12 +399,14 @@ _ts IncrementGameTimer
 .setTime:
     str        r0,[r7,#GameStats_gameTimer]
     mov        pc,lr
+#endif
 
     .align 2, 0
     .pool
 
 
 @@ Updates the game stats tracking multiplayer wins and total battles.
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/utility.c */
 _ts IncrementMPCounters
     LoadMain gameStats, r7, r7
     ldr        r2,=999
@@ -410,6 +425,7 @@ LAB_08000c34:
 LAB_08000c40:
     strh       r1,[r7,#GameStats_multiBattleTotal]
     mov        pc,lr
+#endif
 
     .align 2, 0
     .pool
@@ -452,6 +468,7 @@ _ts FrameTimeToRealTime_Reg
 
 
 @@ Sets the default sort type for folders and sacks.
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/utility.c */
 _ts SetSortDefault
     push       {lr}
     LoadMain gameStats, r7, r7
@@ -459,6 +476,7 @@ _ts SetSortDefault
     strb       r0,[r7,#GameStats_sortDirectionFolder]
     strb       r0,[r7,#GameStats_sortDirectionSack]
     pop        {pc}
+#endif
 
     .align 2, 0
 

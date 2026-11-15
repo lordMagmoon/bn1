@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
-Generate source/m4a_rom.S: the original ROM's sound driver code (the region compiled from
-the SDK's m4a.c with agbcc) as relocatable assembly, so the matching build no longer depends
-on which GCC compiles source/m4a.c.
+Generate assembly for the SDK code regions of the base ROM that this repository's C sources
+cannot reproduce (they were built with agbcc from older SDK revisions, plus an old libgcc):
+
+  source/m4a_rom.S  the m4a sound driver           (replaces source/m4a.c functions)
+  source/sdk_rom.S  AGB SRAM routines + old libgcc  (replaces source/agb_sram.c functions,
+                    _call_via_rX and __divsi3 -- named rom_* so modern libgcc can coexist)
 
 Code halfwords are emitted as .2byte; every word that points into ROM (literal pools,
 switch tables) and every `bl` leaving the region is emitted symbolically, so the code keeps
 working when it moves (shift test / FUNCTIONAL builds).
 
-usage: gen_m4a_rom.py BASE.gba LOCAL.elf OUT.S
+usage: gen_rom_asm.py BASE.gba LOCAL.elf OUTDIR
   LOCAL.elf: any build of this repo (used only to name addresses outside the region).
 """
 import struct, subprocess, sys
@@ -57,10 +60,29 @@ NAMES = {                                      # function entry points (base ROM
     0x0809DF38: "ply_xswee",
 }
 
-LIBGCC = {0x0809E138: "__divsi3"}             # old thumb libgcc in the base ROM
+SDK_START, SDK_END = 0x0809DF68, 0x0809E1D0  # agb_sram.o + libgcc in the base ROM
+_VIA = ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "sl", "fp", "ip", "sp", "lr"]
+SDK_NAMES = {
+    0x0809DF68: "ReadSram_Core",
+    0x0809DF8C: "ReadSram",
+    0x0809DFF0: "WriteSram",
+    0x0809E030: "VerifySram_Core",
+    0x0809E060: "VerifySram",
+    0x0809E0C4: "WriteSramEx",
+    0x0809E138: "rom_divsi3",          # old thumb __divsi3
+}
+SDK_NAMES.update({0x0809E0FC + 4 * i: f"rom_call_via_{r}" for i, r in enumerate(_VIA)})
+REGIONS = [
+    dict(start=START, end=END, names=NAMES, label="m4a_rom_start", out="m4a_rom.S", macro="M4A_C",
+         what="the SDK sound driver (m4a)", csrc="source/m4a.c"),
+    dict(start=SDK_START, end=SDK_END, names=SDK_NAMES, label="sdk_rom_start", out="sdk_rom.S",
+         macro="SDK_C", what="the AGB SRAM routines and the old libgcc (_call_via_rX, __divsi3)",
+         csrc="source/agb_sram.c and libgcc"),
+]
+ALL_NAMES = {**NAMES, **SDK_NAMES}
 
 base_rom = open(sys.argv[1], "rb").read()
-elf, out = sys.argv[2], sys.argv[3]
+elf, outdir = sys.argv[2], sys.argv[3]
 
 def word(a): return struct.unpack_from("<I", base_rom, a - ROM)[0]
 def half(a): return struct.unpack_from("<H", base_rom, a - ROM)[0]
@@ -146,12 +168,11 @@ def outside_name(a):
     (libagbsyscall, sram, libgcc) is matched by content (no pointers there); the sound data
     that follows sits at a constant offset (DATA_DELTA) between the base ROM and the local
     build, measured on gScaleTable (no pointers inside)."""
-    if a in LIBGCC:
-        return LIBGCC[a]
-    h0 = half(a)
-    if (h0 & 0xFF87) == 0x4700 and half(a + 2) == 0x46C0:     # libgcc _call_via_rN: bx rN; nop
-        r = (h0 >> 3) & 0xF
-        return "_call_via_" + {9: "sb", 10: "sl", 11: "fp", 12: "ip", 13: "sp", 14: "lr"}.get(r, f"r{r}")
+    if a in ALL_NAMES:
+        return ALL_NAMES[a]
+    for r in REGIONS:
+        if r["start"] <= a < r["end"]:
+            return f"{r['label']} + {a - r['start']:#x}"
     if a < START:
         return nearest(a)
     if a >= _lsym["gMPlayJumpTableTemplate"] - 0x100:
@@ -166,81 +187,86 @@ def outside_name(a):
     hits = [n for la, n in local if la >= START and local_bytes[la - ROM:la - ROM + 16] == probe]
     return hits[0] if len(hits) == 1 else None
 
-def sym(value, what):
-    thumb = value & 1
-    a = value & ~1
-    if START <= a < END:
-        return f"m4a_rom_start + {a - START:#x}" + (" + 1" if thumb else "")
-    n = outside_name(a)
-    if n is None:
-        sys.exit(f"no symbol for {what} {value:#010x}")
-    return n + (" + 1" if thumb else "")
+def generate(rg):
+    R0, R1, names, label = rg["start"], rg["end"], rg["names"], rg["label"]
 
-# --- classify the region: linear sweep, literal pools are only referenced forward ------------
-data = set()       # addresses of 4-byte data words
-labels = set()
-a = START
-while a < END:
-    if a in data:
-        a += 4
-        continue
-    h = half(a)
-    if (h & 0xF800) == 0x4800:                       # ldr rX, [pc, #imm]
-        lit = ((a + 4) & ~3) + (h & 0xFF) * 4
-        data.add(lit)
-        v = word(lit)
-        if START <= (v & ~1) < END and (v & 1) == 0 and (v & ~1) not in NAMES:
-            # pointer to an in-region table (switch jump table): its entries are data too
-            t = v
-            while t < END and START <= word(t) < END and t not in data:
-                data.add(t)
-                t += 4
-    if (h & 0xF800) == 0xF000 and a + 2 < END and (half(a + 2) & 0xF800) == 0xF800:
-        a += 4
-        continue
-    a += 2
+    def sym(value, what):
+        thumb = value & 1
+        a = value & ~1
+        if R0 <= a < R1:
+            return f"{label} + {a - R0:#x}" + (" + 1" if thumb else "")
+        n = outside_name(a)
+        if n is None:
+            sys.exit(f"no symbol for {what} {value:#010x}")
+        return n + (" + 1" if thumb else "")
 
-# --- emit -------------------------------------------------------------------------------------
-lines = [
-    "@ Generated by cw/tools/gen_m4a_rom.py from the base ROM: the SDK sound driver (m4a) exactly",
-    "@ as shipped. The original was compiled with agbcc from an older SDK revision than the",
-    "@ m4a.c in this repository, so compiling m4a.c cannot reproduce it. Do not edit by hand.",
-    "#if !M4A_C  /* source/m4a.c provides the driver instead when built with -DM4A_C=1 */",
-    "    .syntax unified",
-    "    .thumb",
-    "    .text",
-    "    .align 2, 0",
-    "    .global m4a_rom_start",
-    "m4a_rom_start:",
-]
-a = START
-while a < END:
-    if a in NAMES:
-        n = NAMES[a]
-        lines += ["", f"    .global {n}", "    .thumb_func", f"{n}:"]
-    if a in data:
-        v = word(a)
-        if ROM <= (v & ~1) < 0x08800000:
-            lines.append(f"    .4byte {sym(v, f'pointer at {a:#x}')}")
-        else:
-            lines.append(f"    .4byte {v:#010x}")
-        a += 4
-        continue
-    h = half(a)
-    if (h & 0xF800) == 0xF000 and a + 2 < END and (half(a + 2) & 0xF800) == 0xF800:
-        h2 = half(a + 2)
-        off = ((h & 0x7FF) << 12) | ((h2 & 0x7FF) << 1)
-        if off & 0x400000:
-            off -= 0x800000
-        tgt = a + 4 + off
-        if START <= tgt < END:
-            lines.append(f"    .2byte {h:#06x}, {h2:#06x}  @ bl {NAMES.get(tgt, hex(tgt))}")
-        else:
-            lines.append(f"    bl {sym(tgt, f'bl target at {a:#x}')}")
-        a += 4
-        continue
-    lines.append(f"    .2byte {h:#06x}")
-    a += 2
-lines += ["#endif", ""]
-open(out, "w").write("\n".join(lines))
-print(f"wrote {out}: {len(data)} data words, {sum(1 for l in lines if l.startswith('    bl '))} external calls")
+    # classify: linear sweep, literal pools are only referenced forward
+    data = set()
+    a = R0
+    while a < R1:
+        if a in data:
+            a += 4
+            continue
+        h = half(a)
+        if (h & 0xF800) == 0x4800:                       # ldr rX, [pc, #imm]
+            lit = ((a + 4) & ~3) + (h & 0xFF) * 4
+            data.add(lit)
+            v = word(lit)
+            if R0 <= (v & ~1) < R1 and (v & 1) == 0 and (v & ~1) not in names:
+                t = v                                    # in-region switch table: data too
+                while t < R1 and R0 <= word(t) < R1 and t not in data:
+                    data.add(t)
+                    t += 4
+        if (h & 0xF800) == 0xF000 and a + 2 < R1 and (half(a + 2) & 0xF800) == 0xF800:
+            a += 4
+            continue
+        a += 2
+
+    lines = [
+        f"@ Generated by cw/tools/gen_rom_asm.py from the base ROM: {rg['what']}, exactly as",
+        f"@ shipped. The original was built with agbcc from an older SDK revision (and an old libgcc),",
+        f"@ so compiling {rg['csrc']} cannot reproduce it. Do not edit by hand.",
+        f"#if !{rg['macro']}  /* the C sources provide this code instead when built with -D{rg['macro']}=1 */",
+        "    .syntax unified",
+        "    .thumb",
+        "    .text",
+        "    .align 2, 0",
+        f"    .global {label}",
+        f"{label}:",
+    ]
+    a = R0
+    while a < R1:
+        if a in names:
+            n = names[a]
+            lines += ["", f"    .global {n}", "    .thumb_func", f"{n}:"]
+        if a in data:
+            v = word(a)
+            if ROM <= (v & ~1) < 0x08800000:
+                lines.append(f"    .4byte {sym(v, f'pointer at {a:#x}')}")
+            else:
+                lines.append(f"    .4byte {v:#010x}")
+            a += 4
+            continue
+        h = half(a)
+        if (h & 0xF800) == 0xF000 and a + 2 < R1 and (half(a + 2) & 0xF800) == 0xF800:
+            h2 = half(a + 2)
+            off = ((h & 0x7FF) << 12) | ((h2 & 0x7FF) << 1)
+            if off & 0x400000:
+                off -= 0x800000
+            tgt = a + 4 + off
+            if R0 <= tgt < R1:
+                lines.append(f"    .2byte {h:#06x}, {h2:#06x}  @ bl {names.get(tgt, hex(tgt))}")
+            else:
+                lines.append(f"    bl {sym(tgt, f'bl target at {a:#x}')}")
+            a += 4
+            continue
+        lines.append(f"    .2byte {h:#06x}")
+        a += 2
+    lines += ["#endif", ""]
+    path = f"{outdir}/{rg['out']}"
+    open(path, "w").write("\n".join(lines))
+    print(f"wrote {path}: {len(data)} data words, {sum(1 for l in lines if l.startswith('    bl '))} external calls")
+
+
+for rg in REGIONS:
+    generate(rg)

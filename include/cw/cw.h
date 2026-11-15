@@ -18,8 +18,11 @@
 #include "mmbn.h"
 
 #define CW_REG16(addr) (*(volatile u16 *)(addr))
+#define CW_REG32(addr) (*(volatile u32 *)(addr))
 #define REG_DISPSTAT CW_REG16(0x04000004)
 #define REG_KEYINPUT CW_REG16(0x04000130)
+#define REG_DMA0 0x040000B0
+#define DMA_CNT_ENABLE 0x80000000u
 
 #define DISPSTAT_VBLANK 0x1
 
@@ -31,9 +34,47 @@ extern struct FrameCounter gFrameCounter;
 extern volatile u16 gVBlankFrameCounter;   /* incremented by the VBlank interrupt */
 extern u16 gFrameWaitValue;
 extern u32 gRngState;
+extern struct GameStats gGameStats;
+extern struct DisplaySettings gDisplaySettings;
+extern u32 gDmaParamListSize;
 
-/* Assembly functions called from C (through register-saving thunks). */
+struct CwDmaParam { u32 src, dst, count, control; };
+extern struct CwDmaParam gDmaParamList[64];
+
+extern const u32 MainState[];   /* ROM table loaded into r10 (source/main.S) */
+
+/* libagbsyscall (BIOS calls), same routines the assembly uses */
+s32 Mod(s32 num, s32 denom);
+
+/* Functions now in C that other C code calls */
+u32 Rng_RandomInt(void);
+void Rng_Init(void);
+void Dma_WaitForEnd(u32 flags);
+void Dma_TransferListClear(void);
+
+/* Assembly functions called from C (through register-saving thunks, source/cw/thunks.S). */
 void cw_asm_InitializeInterruptVectors(void);
 void cw_asm_Main_Init(void);
+void cw_asm_Video_InitClearColor(void);
+void cw_asm_Video_ApplySettings(void);
+void cw_asm_Sound_Init(void);
+void cw_asm_BgUpdate_Init(void);
+void cw_asm_Video_Init(void);
+void cw_asm_Oam_Init(void);
+void cw_asm_InitMainMenu(void);
+void cw_asm_Oam_InitTransferData(void);
+void cw_asm_Text_Init(void);
+void cw_asm_Oam_InitAffineData(void);
+void cw_asm_InitWorld_LoadGame(void);
+void cw_asm_InitWorld_NewGame(void);
+void cw_asm_Scene_UnloadAndResetStepCounter(void);
+void cw_asm_Scene_UnloadIfMarked(void);
+void cw_asm_InitBgTask(void);
+void cw_asm_Video_InitBlendSettings(void);
+void cw_asm_InitFadeSettings(void);
+void cw_asm_Sio_SetReady(void);
+void cw_asm_memset0_32(void *ptr, s32 num);
+/* Dma_SetDirect takes its 5th argument (control) in r4. */
+void cw_asm_Dma_SetDirect(u32 src, u32 dst, u32 count, u32 channel, u32 control);
 
 #endif /* CW_H */

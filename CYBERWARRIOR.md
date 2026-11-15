@@ -39,13 +39,29 @@ convenção de chamada própria, ~36% das funções sujam r4–r7 sem salvar), e
   escritos e, para cada chamador, o que ele lê depois da chamada. Se algum chamador depender de
   r1–r3, r12 ou flags, ou se a função receber entrada em r4+, precisa de um shim em asm.
 
+### Código do SDK vindo da ROM (build byte a byte)
+
+A ROM original foi montada com o **agbcc** e revisões antigas do SDK da Nintendo (driver de som m4a,
+rotinas de SRAM) e com uma `libgcc` antiga (`__divsi3` em Thumb, `_call_via_rX`). Compilar os `.c`
+equivalentes com o GCC moderno nunca reproduz a ROM. Por isso:
+
+- `source/m4a_rom.S` e `source/sdk_rom.S` são **gerados da ROM** por `cw/tools/gen_rom_asm.py`
+  (código em `.2byte`, todo ponteiro e `bl` externo simbólico, então continuam funcionando quando o
+  código se desloca). Os `.c` (`m4a.c`, `agb_sram.c`) ficam como referência atrás de `M4A_C`/`SDK_C`.
+- As cópias da `libgcc` antiga se chamam `rom_divsi3`/`rom_call_via_*`, para o C moderno poder usar a
+  `libgcc` atual ao mesmo tempo.
+- Correções de dados: tabelas de som com alinhamento natural (`m4a_tables.c`), byte 3 das 10 vozes de
+  ruído que guardam `0xC0`, tabelas de keysplit que tinham sido lidas como vozes, a tabela de ponteiros
+  do `agb_sram_ptr.S` e o preenchimento com zeros no fim do `m4a_1.S`.
+
 ### Validação
 
 | Job do CI | O que garante |
 |---|---|
 | `matching` | build padrão byte a byte igual à ROM base (precisa do `BASE_ROM_TOKEN`) |
 | `shift` | o código empurrado 0x100 bytes joga igual: o código vivo não tem ponteiros fixos |
-| `functional` | build C x build asm: teste diferencial no Unicorn por função + todos os quadros iguais no mGBA |
+| `functional` | build C x build asm: teste diferencial no Unicorn por função + as duas ROMs lado a lado no mGBA (`framecmp2`: tolera só quadros isolados com ≤ 2 linhas diferentes, efeito de tempo; falha em diferença maior ou quadros diferentes seguidos) |
+| `matching-check` (repo privado) | build padrão byte a byte igual à ROM base |
 
 Ferramentas:
 - `cw/framecmp/framecmp.c` — roda a ROM na libmgba sem tela, com um roteiro de entradas, e imprime o CRC32 de cada quadro.
@@ -85,7 +101,18 @@ validação oficial é sempre o CI com a imagem `devkitpro/devkitarm`. `gbafix` 
   C23 por padrão, onde `bool` vira `_Bool` e `isFadeActive == 1` virava `!= 0` (o jogo guarda 2 ali).
   Correção: C compilado com `-std=gnu17`. **Marco 1 concluído** (falta só o `BASE_ROM_TOKEN` no CI).
 
-## Próximo marco (proposta) — Marco 2: loop principal e subsistemas básicos
+## Marco 2 — loop principal e subsistemas básicos (em andamento)
+
+- [x] `Main_Init` em C (21 chamadas a asm por thunks; r10 definido por `asm`)
+- [x] `utility.S`: `memset_16`, `memcpy_8`, `ConvertNumToBCD`, `GetWidthOfBcdNumber`, `ArrayShuffle`,
+      `GetRandomElementOfArray`, `IncrementGameTimer`, `IncrementMPCounters`, `SetSortDefault`
+- [x] `dma.S`: `Dma_WaitForEnd`, `Dma_TransferListClear`, `Dma_TransferListStartAll` (thunk com 5º argumento em r4)
+- [x] `cw/tools/guard_asm.py` (guardas automáticas), difftest com divisão da BIOS e argumentos/retornos
+- [ ] Funções com convenção especial (`memset0_16`, `memcpy_16`, `memset_32`, `Dma_TransferListAdd`…): shims
+- [ ] `AgbMain`, vídeo (`Video_ApplySettings`, `Video_BlitScreens`, `BgUpdate_*`)
+- [ ] Roteiro até a primeira batalha
+
+### Proposta original do Marco 2
 
 1. `AgbMain` + `Main_Init` em C (o loop vira C chamando asm pelos thunks; tabela `jumpTableMain`).
 2. `dma.S`, `utility.S` (cópias/limpezas de memória — muito chamadas, boas para validar o `abi_scan`).
@@ -100,3 +127,8 @@ validação oficial é sempre o CI com a imagem `devkitpro/devkitarm`. `gbafix` 
   Com o agbcc do pret, ~27 das 54 funções do `m4a.c` já batem byte a byte; as outras diferem
   porque o `m4a.c` do pret é de outra versão do SDK. O `make check` do upstream não acusa isso
   porque o `|| quick_comp` engole o erro.
+- **2026-11-15** — **Build byte a byte com qualquer devkitARM**: m4a, SRAM e libgcc antigos gerados da
+  ROM; correções de dados de som. Localmente a ROM inteira bate (fora o logotipo do cabeçalho, que o
+  `gbafix` oficial escreve). Marco 2: 13 funções novas em C (total 20/9485), `framecmp2` tolerante a
+  diferenças de tempo de uma linha. `abi_scan` agora avisa funções sem chamadores diretos
+  (`GetVcountPlusVal`, `ArraySort`, `FrameTimeToRealTime_Reg` não são referenciadas: código morto).

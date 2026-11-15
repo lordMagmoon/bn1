@@ -999,6 +999,7 @@ SECTIONS {
         *libagbsyscall.a:LZ77UnCompWram.o(.text)
         *libagbsyscall.a:Sqrt.o(.text)
 		build/agb_sram.o(.text)
+		build/sdk_rom.o(.text)
 		*libgcc.a:_call_via_rX.o(.text)
 		*libgcc.a:_divsi3.o(.text)
 		build/m4a_tables.o(.rodata)

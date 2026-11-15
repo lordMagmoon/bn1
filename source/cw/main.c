@@ -2,6 +2,35 @@
 #if FUNCTIONAL
 #include "cw/cw.h"
 
+/* Initializes the main state (r10 = &MainState) and every subsystem. Called at boot and on soft reset. */
+void Main_Init(void)
+{
+    __asm__ volatile("mov r10, %0" : : "r"(MainState));
+    gDisplaySettings.dispcnt = 0x40;
+    cw_asm_Video_InitClearColor();
+    cw_asm_Video_ApplySettings();
+    cw_asm_Sound_Init();
+    cw_asm_BgUpdate_Init();
+    cw_asm_Video_Init();
+    cw_asm_Oam_Init();
+    cw_asm_InitMainMenu();
+    cw_asm_Oam_InitTransferData();
+    Dma_TransferListClear();
+    Rng_Init();
+    cw_asm_Text_Init();
+    cw_asm_Oam_InitAffineData();
+    cw_asm_InitWorld_LoadGame();
+    cw_asm_InitWorld_NewGame();
+    cw_asm_Scene_UnloadAndResetStepCounter();
+    cw_asm_Scene_UnloadIfMarked();
+    cw_asm_InitBgTask();
+    cw_asm_Video_InitBlendSettings();
+    cw_asm_InitFadeSettings();
+    cw_asm_Sio_SetReady();
+    gFrameWaitValue = 1;
+    cw_asm_memset0_32(&gManager, 8);
+}
+
 /* Waits until the VBlank interrupt has counted gFrameWaitValue frames, then resets the count. */
 void Main_WaitFrames(void)
 {

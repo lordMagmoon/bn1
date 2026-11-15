@@ -31,6 +31,37 @@ cw_asm_\name:
 
     CW_ASM_THUNK InitializeInterruptVectors
     CW_ASM_THUNK Main_Init
+    CW_ASM_THUNK Video_InitClearColor
+    CW_ASM_THUNK Video_ApplySettings
+    CW_ASM_THUNK Sound_Init
+    CW_ASM_THUNK BgUpdate_Init
+    CW_ASM_THUNK Video_Init
+    CW_ASM_THUNK Oam_Init
+    CW_ASM_THUNK InitMainMenu
+    CW_ASM_THUNK Oam_InitTransferData
+    CW_ASM_THUNK Text_Init
+    CW_ASM_THUNK Oam_InitAffineData
+    CW_ASM_THUNK InitWorld_LoadGame
+    CW_ASM_THUNK InitWorld_NewGame
+    CW_ASM_THUNK Scene_UnloadAndResetStepCounter
+    CW_ASM_THUNK Scene_UnloadIfMarked
+    CW_ASM_THUNK InitBgTask
+    CW_ASM_THUNK Video_InitBlendSettings
+    CW_ASM_THUNK InitFadeSettings
+    CW_ASM_THUNK Sio_SetReady
+    CW_ASM_THUNK memset0_32
+
+@ Dma_SetDirect(src r0, dst r1, count r2, channel r3, control r4): the 5th C argument is on
+@ the stack. Dma_SetDirect only uses r0-r7, so r8-r11 need no saving here.
+    .global cw_asm_Dma_SetDirect
+    .thumb_func
+cw_asm_Dma_SetDirect:
+    push    {r4-r7,lr}
+    ldr     r4,[sp,#20]
+    bl      Dma_SetDirect
+    pop     {r4-r7}
+    pop     {r3}
+    bx      r3
 
     .align 2, 0
 #endif

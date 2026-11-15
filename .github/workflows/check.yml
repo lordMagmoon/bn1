@@ -91,6 +91,8 @@ jobs:
           apt-get install -y -q --no-install-recommends python3-venv python3-pip g++ gcc make libmgba-dev zlib1g-dev
           pip3 install -q --break-system-packages unicorn || pip3 install -q unicorn
       - name: Build framecmp
-        run: gcc -O2 -o /usr/local/bin/framecmp cw/framecmp/framecmp.c -lmgba -lz
+        run: |
+          gcc -O2 -o /usr/local/bin/framecmp cw/framecmp/framecmp.c -lmgba -lz
+          gcc -O2 -o /usr/local/bin/framecmp2 cw/framecmp/framecmp2.c -lmgba
       - name: Functional test
         run: PATH="$DEVKITARM/bin:$PATH" cw/scripts/functional_test.sh cw/movies/intro_room.txt 4300

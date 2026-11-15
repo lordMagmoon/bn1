@@ -37,6 +37,7 @@ listDmaChannel:
 @@ Waits for any active DMA transfers to end.
 @@ In:
 @@ r0: WaitDmaFlag flags - The DMA registers to check. Bit 1 set checks DMA1, Bit 2 DMA2, and so on.
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/dma.c */
 _ts Dma_WaitForEnd
     ldr        r3,PTR_REG_DMA0
 .checkDma0:
@@ -69,14 +70,17 @@ _ts Dma_WaitForEnd
     and        r1,r2
     bne        .checkDma0
     mov        pc,lr
+#endif
 
 
 @@ Clears the list of pending DMA transfers.
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/dma.c */
 _ts Dma_TransferListClear
     ldr        r0,PTR_dmaListSz_0
     mov        r1,#0x0
     str        r1,[r0]
     mov        pc,lr
+#endif
 
 
 @@ Adds params for channel 3 DMA transfer to the transfer queue.
@@ -118,6 +122,7 @@ pList:
 
 
 @@ Performs all queued DMA channel 3 transfers.
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/dma.c */
 _ts Dma_TransferListStartAll
     push       {lr}
     ldr        r0,=gDmaParamListSize
@@ -144,6 +149,7 @@ LAB_080009ec:
 LAB_08000a12:
     bl         Dma_TransferListClear
     pop        {pc}
+#endif
 
 PTR_listDmaChannel: .word listDmaChannel
 PTR_dmaEnableMask:  .word DMA_ENABLE

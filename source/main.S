@@ -178,6 +178,7 @@ _ts Main_SoftResetCheck
 
 
 @@ Initializes the main state used by the game, as well as other subsystems.
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/main.c */
 _ts Main_Init
     push       {lr}
     ldr        r0,PTR_MainState
@@ -217,9 +218,11 @@ _ts Main_Init
     mov        r1,#0x8
     bl         memset0_32
     pop        {pc}
+#endif
 
 PTR_MainState: .word MainState
 
+    .global MainState  @ CyberWarrior: referenced by source/cw/main.c
 MainState:
     .word gManager
     .word gInput
