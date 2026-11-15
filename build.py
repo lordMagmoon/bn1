@@ -54,14 +54,27 @@ def task_prep(python_path: Path):
     run(["make", "offsets", make_arg])
 
 
-def task_all(python_path: Path):
+def ensure_mode(mode: str):
+    """CyberWarrior: objects differ between the matching and FUNCTIONAL builds, so tidy
+    the build directory whenever the mode changes."""
+    stamp = Path("build") / ".mode"
+    if stamp.exists() and stamp.read_text().strip() != mode:
+        task_tidy()
+    Path("build").mkdir(exist_ok=True)
+    stamp.write_text(mode)
+
+
+def task_all(python_path: Path, functional: bool = False):
+    ensure_mode("functional" if functional else "matching")
     task_prep(python_path)
     make_arg = f"PYTHON={python_path}"
     procCount = multiprocessing.cpu_count()
-    run(["make", f"-j{procCount}", make_arg])
+    extra = ["FUNCTIONAL=1"] if functional else []
+    run(["make", f"-j{procCount}", make_arg] + extra)
 
 
 def task_check(python_path: Path):
+    ensure_mode("matching")
     task_prep(python_path)
     make_arg = f"PYTHON={python_path}"
     procCount = multiprocessing.cpu_count()
@@ -80,6 +93,9 @@ def main():
         task_tidy()
         python_path = create_venv()
         task_all(python_path)
+    elif args.task == "functional":
+        python_path = create_venv()
+        task_all(python_path, functional=True)
     elif args.task == "check":
         python_path = create_venv()
         task_check(python_path)

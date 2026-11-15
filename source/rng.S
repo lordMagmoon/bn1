@@ -2,6 +2,7 @@
     .include "macros.inc"
 
 
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/rng.c */
 @@ Initializes the RNG.
 _ts Rng_Init
     ldr        r0,rngInitSeed
@@ -39,6 +40,8 @@ _ts Rng_RandomInt
     str        r0,[r7,#0x0]
     lsr        r0,r0,#0x1
     mov        pc,lr
+
+#endif
 
     .align 2, 0
 

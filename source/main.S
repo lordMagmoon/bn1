@@ -61,6 +61,7 @@ jumpTableMain:
     .word Credits_Main
 
 
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/main.c */
 @@ Waits for a specific amount of frames to pass.
 _ts Main_WaitFrames
     push       {lr}
@@ -173,6 +174,7 @@ _ts Main_SoftResetCheck
 
     .word .+4
     .word 0x200ace0
+#endif
 
 
 @@ Initializes the main state used by the game, as well as other subsystems.
@@ -253,6 +255,7 @@ MainState:
     .word gFieldObstacleManager
 
 
+#if !FUNCTIONAL /* CyberWarrior: C version in source/cw/main.c */
 @@ Wait for vblank to finish.
 _ts Main_WaitForVBlank
     push       {lr}
@@ -263,6 +266,7 @@ _ts Main_WaitForVBlank
     tst        r1,r2
     beq        1b
     pop        {pc}
+#endif
 
     .align 2, 0
 

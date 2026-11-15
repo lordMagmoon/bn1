@@ -76,3 +76,19 @@ jobs:
         run: gcc -O2 -o /usr/local/bin/framecmp cw/framecmp/framecmp.c -lmgba -lz
       - name: Shift test
         run: cw/scripts/shift_test.sh cw/movies/boot_newgame.txt 1200
+
+  functional:
+    name: Functional build (C) must behave like the asm build
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends python3-venv python3-pip g++ gcc make libmgba-dev zlib1g-dev
+          pip3 install -q --break-system-packages unicorn || pip3 install -q unicorn
+      - name: Build framecmp
+        run: gcc -O2 -o /usr/local/bin/framecmp cw/framecmp/framecmp.c -lmgba -lz
+      - name: Functional test
+        run: PATH="$DEVKITARM/bin:$PATH" cw/scripts/functional_test.sh cw/movies/boot_newgame.txt 1200

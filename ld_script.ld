@@ -1004,6 +1004,8 @@ SECTIONS {
 		build/m4a_data.o(.text)
 		build/sound_data.o(.text)
 		build/agb_sram_ptr.o(.text)
+		/* CyberWarrior: functional C + thunks (empty unless FUNCTIONAL=1) */
+		build/cw/*.o(.text .text.* .rodata .rodata.*)
 	} > rom
 
 	intr __ram_code_address : {

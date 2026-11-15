@@ -32,6 +32,14 @@ ARCH				:= -mthumb -mthumb-interwork -march=armv4t
 
 CFLAGS				:= -mthumb -O1 -fno-toplevel-reorder -Wno-pointer-to-int-cast
 ASFLAGS				:= $(ARCH) -mcpu=arm7tdmi
+
+# CyberWarrior: FUNCTIONAL=1 replaces decompiled assembly functions with their C versions
+# (source/cw/). The default build (FUNCTIONAL=0) is the byte-identical ROM.
+FUNCTIONAL			?= 0
+ifeq ($(FUNCTIONAL),1)
+CFLAGS				+= -DFUNCTIONAL=1 -ffixed-r10
+SDEFINES			:= -D FUNCTIONAL=1
+endif
 LDFLAGS				:= -nostdlib -T $(MAIN_LD_SCRIPT) -Wl,-Map=$(BUILD)/$(TARGET).map
 VPATH				:= $(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) $(ASSETS) $(SOUND) $(BUILD)
 
@@ -127,4 +135,4 @@ $(C_OBJECTS): $(BUILD)/%.o: $(SOURCE)/%.c
 
 $(S_OBJECTS): $(BUILD)/%.o: $(SOURCE)/%.S
 	@echo $(notdir $<)
-	$(CC) $(INCLUDE) -D $(BASE_DEFINE)=\"$(BASE).gba\" -E $< | $(PARSE_FIXED) | $(AS) $(ASINCLUDE) $(ASFLAGS) -o $@
+	$(CC) $(INCLUDE) $(SDEFINES) -D $(BASE_DEFINE)=\"$(BASE).gba\" -E $< | $(PARSE_FIXED) | $(AS) $(ASINCLUDE) $(ASFLAGS) -o $@
