@@ -56,7 +56,9 @@ jobs:
 
       - name: Progress
         if: always()
-        run: .venv/bin/python tools/progress.py -mp build/mmbn.map || true
+        run: |
+          .venv/bin/python tools/progress.py -mp build/mmbn.map || true
+          python3 cw/tools/cw_progress.py .
 
       - name: Without ROM token
         if: env.HAS_ROM_TOKEN != 'true'

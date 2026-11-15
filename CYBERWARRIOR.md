@@ -53,6 +53,7 @@ Ferramentas:
 - `cw/tests/difftest.py` — teste diferencial asm x C no Unicorn com RAM/registradores/teclas aleatórios.
   Validado com mutações (alterar a constante do RNG ou um limite do `ReadInput` faz o teste falhar).
 - `cw/tools/abi_scan.py` — análise de convenção de chamada (ver acima).
+- `cw/tools/cw_progress.py` — funções já em C / total.
 
 ### Ambiente local (sem devkitARM)
 
@@ -70,8 +71,8 @@ validação oficial é sempre o CI com a imagem `devkitpro/devkitarm`. `gbafix` 
 - [x] `cw/tools/abi_scan.py` + thunks C→asm
 - [x] Primeiro lote em C: `Main_WaitFrames`, `Main_WaitForVBlank`, `Main_ReadInput`,
       `Main_SoftResetCheck`, `Rng_Init`, `Rng_RandomUint`, `Rng_RandomInt`
-- [ ] CI `functional` verde com o roteiro `intro_room`
-- [ ] Métrica de progresso de decompilação (funções em C / total)
+- [x] CI `functional` verde com o roteiro `intro_room` (4.300 quadros idênticos; difftest 300/300 por função)
+- [x] Métrica de progresso: `python3 cw/tools/cw_progress.py .` → **7/9485 funções em C (0,07%)**
 
 ## Registro
 
@@ -79,3 +80,14 @@ validação oficial é sempre o CI com a imagem `devkitpro/devkitarm`. `gbafix` 
   Descoberta: código escrito à mão em assembly → decompilação funcional.
 - **2026-11-15** — build duplo asm/C, primeiras 7 funções em C (loop principal, entrada, RNG),
   `abi_scan`, `difftest` (200/200 execuções idênticas por função), job `functional`, roteiro `intro_room`.
+- **2026-11-15** — CI `functional` verde. O difftest pegou uma armadilha real: o GCC do devkitARM usa
+  C23 por padrão, onde `bool` vira `_Bool` e `isFadeActive == 1` virava `!= 0` (o jogo guarda 2 ali).
+  Correção: C compilado com `-std=gnu17`. **Marco 1 concluído** (falta só o `BASE_ROM_TOKEN` no CI).
+
+## Próximo marco (proposta) — Marco 2: loop principal e subsistemas básicos
+
+1. `AgbMain` + `Main_Init` em C (o loop vira C chamando asm pelos thunks; tabela `jumpTableMain`).
+2. `dma.S`, `utility.S` (cópias/limpezas de memória — muito chamadas, boas para validar o `abi_scan`).
+3. Vídeo: `Video_ApplySettings`, `Video_BlitScreens`, `BgUpdate_*`.
+4. Roteiros novos: primeira batalha (para cobrir RNG em batalha e a Custom Screen depois).
+5. Gerar thunks automaticamente a partir de uma lista (hoje são escritos à mão em `thunks.S`).
