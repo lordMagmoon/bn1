@@ -992,6 +992,7 @@ SECTIONS {
 		build/network.o(.text)
 		build/m4a_1.o(.text)
 		build/m4a.o(.text)
+		build/m4a_rom.o(.text)
         *libagbsyscall.a:CpuSet.o(.text)
         *libagbsyscall.a:Div.o(.text)
 		*libagbsyscall.a:Mod.o(.text)
