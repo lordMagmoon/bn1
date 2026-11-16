@@ -96,3 +96,17 @@ jobs:
           gcc -O2 -o /usr/local/bin/framecmp2 cw/framecmp/framecmp2.c -lmgba
       - name: Functional test
         run: PATH="$DEVKITARM/bin:$PATH" cw/scripts/functional_test.sh cw/movies/intro_room.txt 4300
+
+  recomp:
+    name: Recompiler (Thumb -> C) vs original code in Unicorn
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install deps
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends python3-venv python3-pip g++ gcc make
+          pip3 install -q --break-system-packages unicorn pyelftools || pip3 install -q unicorn pyelftools
+      - name: Recompile the ROM and test a random sample of functions
+        run: PATH="$DEVKITARM/bin:$PATH" cw/scripts/recomp_test.sh 400

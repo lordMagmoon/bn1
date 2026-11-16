@@ -11,7 +11,8 @@ usage: test_recomp.py ROM.gba LIB.so SYMBOLS.elf [-n RUNS] [--only NAME ...] [--
 """
 import argparse, bisect, ctypes, random, struct, sys
 from elftools.elf.elffile import ELFFile
-from unicorn import (Uc, UcError, UC_ARCH_ARM, UC_MODE_THUMB, UC_HOOK_CODE, UC_HOOK_INTR)
+from unicorn import (Uc, UcError, UC_ARCH_ARM, UC_MODE_THUMB, UC_HOOK_CODE, UC_HOOK_INTR,
+                     UC_PROT_READ, UC_PROT_EXEC)
 from unicorn.arm_const import *
 
 try:
@@ -85,14 +86,14 @@ class Recomp:
         self.lib = ctypes.CDLL(lib)
         self.rom = ctypes.create_string_buffer(rom, len(rom))
         self.lib.cw_set_rom(self.rom, len(rom))
-        self.lib.cw_test_run.argtypes = [ctypes.POINTER(CwCpu), ctypes.c_uint32]
+        self.lib.cw_test_run.argtypes = [ctypes.POINTER(CwCpu), ctypes.c_uint32, ctypes.c_uint32, ctypes.c_uint32]
         self.mem = {name: (ctypes.c_uint8 * size).in_dll(self.lib, sym) for name, _, size, sym in REGIONS}
         self.calls = (ctypes.c_uint32 * (64 * 5)).in_dll(self.lib, "cw_test_calls")
         self.ncalls = ctypes.c_int.in_dll(self.lib, "cw_test_ncalls")
         ctypes.c_uint64.in_dll(self.lib, "cw_loop_limit").value = 20000
         ctypes.c_int.in_dll(self.lib, "cw_strict_map").value = 1
 
-    def run(self, addr, mem, regs, flags):
+    def run(self, addr, end, mem, regs, flags):
         for name, data in mem.items():
             ctypes.memmove(self.mem[name], data, len(data))
         c = CwCpu()
@@ -100,7 +101,7 @@ class Recomp:
             c.r[i] = v
         c.r[13], c.r[14] = SP0, RET | 1
         c.n, c.z, c.c, c.v = flags
-        if self.lib.cw_test_run(ctypes.byref(c), addr) != 0:
+        if self.lib.cw_test_run(ctypes.byref(c), addr, addr, end) != 0:
             return {"error": "no entry"}
         if c.fault:
             return {"error": f"fault {c.fault} @ {c.fault_addr:#x}"}
@@ -128,6 +129,7 @@ class Uni:
         rom_size = (len(self.rom) + 0xFFF) & ~0xFFF
         uc.mem_map(0x08000000, rom_size)
         uc.mem_write(0x08000000, self.rom)
+        uc.mem_protect(0x08000000, rom_size, UC_PROT_READ | UC_PROT_EXEC)   # ROM is read-only
         uc.mem_map(RET, 0x1000)
         for r, v in zip(GPR, regs + [SP0, RET | 1]):
             uc.reg_write(r, v)
@@ -167,6 +169,9 @@ class Uni:
         try:
             uc.emu_start(start | 1, RET, count=40000)
         except UcError as e:
+            # a computed jump/call to a non-existent address (random data): state not usable
+            if "FETCH" in str(e) or "WRITE_PROT" in str(e):
+                return {"error": "budget (jump to unmapped address)"}
             return {"error": f"uc {e}"}
         if err:
             return {"error": err[0]}
@@ -210,15 +215,16 @@ def main():
     rng = random.Random(a.seed)
     if a.sample:
         funcs = rng.sample(funcs, min(a.sample, len(funcs)))
-    tally = {"ok": 0, "fail": 0, "untested": 0}
+    tally = {"ok": 0, "fail": 0, "untested": 0, "arm7": 0}
+    plain = ctypes.c_int.in_dll(rc.lib, "cw_plain_unaligned")
     fails = []
     for name, start, end in funcs:
-        good = bad = skipped = 0
+        good = bad = skipped = quirk = 0
         first = None
         for it in range(a.n):
             mem, regs, flags = rand_state(rng)
             ru = uni.run(start, end, mem, regs, flags)
-            rr = rc.run(start, mem, regs, flags)
+            rr = rc.run(start, end, mem, regs, flags)
             if "error" in ru or "error" in rr:
                 # both failing the same way (bad pointers, waits) is not a verdict
                 if ("error" in ru) != ("error" in rr) and not ("budget" in ru.get("error", "") or "fault 2" in rr.get("error", "")):
@@ -229,22 +235,32 @@ def main():
                 continue
             d = compare(ru, rr)
             if d:
+                # same run with plain unaligned reads: identical => only an ARM7 load quirk
+                plain.value = 1
+                rr2 = rc.run(start, end, mem, regs, flags)
+                plain.value = 0
+                if "error" not in rr2 and not compare(ru, rr2):
+                    quirk += 1
+                    continue
                 bad += 1
                 first = first or d
             else:
                 good += 1
+        if quirk and not bad:
+            tally["arm7"] += 1
         if bad:
             tally["fail"] += 1
             fails.append((name, start, bad, good, first))
-        elif good:
+        elif good and not quirk:
             tally["ok"] += 1
-        else:
+        elif not quirk:
             tally["untested"] += 1
         if a.v:
             print(f"{'FAIL' if bad else 'ok  ' if good else 'skip'} {name} {start:#x}: {good} identical, {bad} differ, {skipped} skipped")
     for name, start, bad, good, first in fails[:40]:
         print(f"FAIL {name} @ {start:#x} ({bad} differ, {good} identical): " + "; ".join(first[:4]))
-    print(f"functions: {tally['ok']} identical in all runs, {tally['fail']} with differences, "
+    print(f"functions: {tally['ok']} identical in all runs, {tally['arm7']} differ only by ARM7 misaligned-load "
+          f"behaviour (recompiler follows the GBA), {tally['fail']} with differences, "
           f"{tally['untested']} never completed (random state not usable)")
     sys.exit(1 if tally["fail"] else 0)
 

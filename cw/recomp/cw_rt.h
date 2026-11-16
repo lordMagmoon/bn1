@@ -35,11 +35,19 @@ static inline u32 rd8(CwCpu *c, u32 a) { u8 *p = cw_mem_ptr(c, a, 1, 0); return 
 static inline u32 rd16raw(CwCpu *c, u32 a) { u8 *p = cw_mem_ptr(c, a & ~1u, 2, 0); return p ? (u32)(p[0] | p[1] << 8) : 0; }
 static inline u32 rd32raw(CwCpu *c, u32 a) { u8 *p = cw_mem_ptr(c, a & ~3u, 4, 0); return p ? (u32)(p[0] | p[1] << 8 | p[2] << 16 | (u32)p[3] << 24) : 0; }
 static inline u32 ror32(u32 v, u32 n) { n &= 31; return n ? (v >> n) | (v << (32 - n)) : v; }
-/* ARM7TDMI: misaligned LDR/LDRH rotate the aligned value; LDRSH at an odd address = LDRSB */
-static inline u32 rd32(CwCpu *c, u32 a) { return ror32(rd32raw(c, a), (a & 3) * 8); }
-static inline u32 rd16(CwCpu *c, u32 a) { return ror32(rd16raw(c, a), (a & 1) * 8); }
+/* ARM7TDMI: misaligned LDR/LDRH rotate the aligned value; LDRSH at an odd address = LDRSB.
+ * cw_plain_unaligned (tests only) switches to plain byte-wise unaligned reads, like ARMv6+ /
+ * the Unicorn reference, to tell ARM7 quirks apart from real recompiler differences. */
+extern int cw_plain_unaligned;
+static inline u32 rd8(CwCpu *c, u32 a);
+static inline u32 rdbytes(CwCpu *c, u32 a, int n) { u32 v = 0; for (int i = 0; i < n; ++i) v |= rd8(c, a + i) << (8 * i); return v; }
+static inline u32 rd32(CwCpu *c, u32 a) { if (cw_plain_unaligned && (a & 3)) return rdbytes(c, a, 4); return ror32(rd32raw(c, a), (a & 3) * 8); }
+static inline u32 rd16(CwCpu *c, u32 a) { if (cw_plain_unaligned && (a & 1)) return rdbytes(c, a, 2); return ror32(rd16raw(c, a), (a & 1) * 8); }
 static inline u32 rds8(CwCpu *c, u32 a) { return (u32)(s32)(int8_t)rd8(c, a); }
-static inline u32 rds16(CwCpu *c, u32 a) { return (a & 1) ? rds8(c, a) : (u32)(s32)(int16_t)rd16raw(c, a); }
+static inline u32 rds16(CwCpu *c, u32 a) {
+    if (a & 1) return cw_plain_unaligned ? (u32)(s32)(int16_t)rdbytes(c, a, 2) : rds8(c, a);
+    return (u32)(s32)(int16_t)rd16raw(c, a);
+}
 void wr8(CwCpu *c, u32 a, u32 v);
 void wr16(CwCpu *c, u32 a, u32 v);
 void wr32(CwCpu *c, u32 a, u32 v);

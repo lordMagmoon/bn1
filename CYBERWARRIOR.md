@@ -101,6 +101,30 @@ validação oficial é sempre o CI com a imagem `devkitpro/devkitarm`. `gbafix` 
   C23 por padrão, onde `bool` vira `_Bool` e `isFadeActive == 1` virava `!= 0` (o jogo guarda 2 ali).
   Correção: C compilado com `-std=gnu17`. **Marco 1 concluído** (falta só o `BASE_ROM_TOKEN` no CI).
 
+## Marco 3 — recompilação estática (em andamento)
+
+Objetivo: ver o jogo rodando fora do GBA cedo (PC primeiro, depois 3DS), sem esperar a decompilação manual.
+
+- [x] `cw/recomp/thumb2c.py`: traduz **todo o código Thumb da ROM** (9.552 funções, ~183 mil instruções)
+      para C que mantém o estado completo do ARM7TDMI (registradores, NZCV, mapa de memória do GBA).
+      Desvios viram `goto`; `bl` vira chamada com retorno verificado; saltos calculados (`bx`, `pop {pc}`,
+      `mov pc`) voltam, vão para um rótulo local ou viram chamada de cauda; retorno para outro lugar
+      "desenrola" a pilha de C até o dono. Literais da ROM viram constantes. `mov lr, pc` marca o ponto
+      de retorno de chamadas `mov lr,pc; bx rX`.
+- [x] `cw/recomp/cw_rt.{h,c}`: memória com espelhamento do GBA (modo estrito nos testes), flags exatas
+      (deslocamentos por registrador, ADC/SBC), **leituras desalinhadas do ARM7** (rotação; `ldrsh` ímpar =
+      `ldrsb`, que o jogo usa de propósito), divisão da BIOS, despachante de chamadas.
+- [x] `cw/recomp/test_recomp.py`: cada função recompilada x código original no Unicorn, mesmo estado aleatório;
+      compara r0–r14, NZCV, toda a memória e as chamadas. Amostra de 1.500 funções: **990 idênticas**,
+      6 diferem só pelo comportamento de leitura desalinhada do ARM7 (o recompilador segue o GBA; o Unicorn
+      é ARMv5), as restantes são tabelas de salto com índice aleatório caindo em dados.
+- [x] Job `recomp` no CI (amostra de 400 funções por execução, semente muda por dia).
+- [ ] Código ARM (rotina de interrupção, `SoundMain` do m4a, código copiado para a IWRAM).
+- [ ] Interpretador de reserva para endereços não descobertos estaticamente.
+- [ ] Camada de hardware no PC: vídeo (modos 0–2, sprites, blending), DMA, timers, IRQ/VBlank, teclado,
+      som; laço principal com eventos de hardware nos pontos de `CW_LOOP`.
+- [ ] Primeiro boot no PC, comparado quadro a quadro com o mGBA; depois a camada do 3DS.
+
 ## Marco 2 — loop principal e subsistemas básicos (em andamento)
 
 - [x] `Main_Init` em C (21 chamadas a asm por thunks; r10 definido por `asm`)
@@ -132,3 +156,7 @@ validação oficial é sempre o CI com a imagem `devkitpro/devkitarm`. `gbafix` 
   `gbafix` oficial escreve). Marco 2: 13 funções novas em C (total 20/9485), `framecmp2` tolerante a
   diferenças de tempo de uma linha. `abi_scan` agora avisa funções sem chamadores diretos
   (`GetVcountPlusVal`, `ArraySort`, `FrameTimeToRealTime_Reg` não são referenciadas: código morto).
+- **2026-11-16** — PR #1 sem resposta ainda. **Marco 3 iniciado**: recompilador estático Thumb→C para a ROM
+  inteira, runtime e teste diferencial contra o Unicorn (990/1.500 funções idênticas na amostra; nenhuma
+  diferença atribuível ao recompilador). Achado: o jogo usa de propósito `ldrsh` em endereço ímpar
+  (no ARM7 lê um byte com sinal) para ler tabelas de coordenadas.

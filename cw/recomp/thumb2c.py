@@ -110,6 +110,9 @@ class Func:
                         self.ptrs.add(v)
                 if bl is not None:
                     self.calls.add(bl)
+                if h == 0x46FE:                          # mov lr, pc: a call returns to a+4
+                    self.roots.add(a + 4)
+                    work.append(a + 4)
                 for t in targets:
                     if self.start <= t < self.end and t not in self.insns:
                         work.append(t)

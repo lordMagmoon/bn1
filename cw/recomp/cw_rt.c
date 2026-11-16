@@ -8,6 +8,8 @@ u8 cw_ewram[0x40000], cw_iwram[0x8000], cw_io[0x400], cw_pal[0x400], cw_vram[0x1
     cw_oam[0x400], cw_sram[0x10000];
 const u8 *cw_rom;
 u64 cw_loop_limit = ~0ull;
+int cw_strict_map;
+int cw_plain_unaligned;
 u32 cw_rom_size;
 
 static void fault(CwCpu *c, u32 addr) {
@@ -15,7 +17,6 @@ static void fault(CwCpu *c, u32 addr) {
 }
 
 /* Tests: no mirroring, only the exact region sizes are mapped (like the Unicorn reference). */
-int cw_strict_map;
 static const u32 strict_size[16] = { 0, 0, 0x40000, 0x8000, 0x400, 0x400, 0x18000, 0x400,
                                      0x2000000, 0, 0, 0, 0, 0, 0x10000, 0 };
 
@@ -52,18 +53,22 @@ void cw_io_write(CwCpu *c, u32 addr, u32 value, u32 size) {
     for (u32 i = 0; i < size; ++i) cw_io[(o + i) & 0x3FF] = (u8)(value >> (8 * i));
 }
 
+static int io_ok(CwCpu *c, u32 a, u32 size) {
+    if (cw_strict_map && (a & 0xFFFFFF) + size > 0x400) { fault(c, a); return 0; }
+    return 1;
+}
 void wr8(CwCpu *c, u32 a, u32 v) {
-    if ((a >> 24) == 0x04) { cw_io_write(c, a, v, 1); return; }
+    if ((a >> 24) == 0x04) { if (io_ok(c, a, 1)) cw_io_write(c, a, v, 1); return; }
     u8 *p = cw_mem_ptr(c, a, 1, 1); if (p) *p = (u8)v;
 }
 void wr16(CwCpu *c, u32 a, u32 v) {
     a &= ~1u;
-    if ((a >> 24) == 0x04) { cw_io_write(c, a, v, 2); return; }
+    if ((a >> 24) == 0x04) { if (io_ok(c, a, 2)) cw_io_write(c, a, v, 2); return; }
     u8 *p = cw_mem_ptr(c, a, 2, 1); if (p) { p[0] = (u8)v; p[1] = (u8)(v >> 8); }
 }
 void wr32(CwCpu *c, u32 a, u32 v) {
     a &= ~3u;
-    if ((a >> 24) == 0x04) { cw_io_write(c, a, v, 4); return; }
+    if ((a >> 24) == 0x04) { if (io_ok(c, a, 4)) cw_io_write(c, a, v, 4); return; }
     u8 *p = cw_mem_ptr(c, a, 4, 1); if (p) { p[0] = (u8)v; p[1] = (u8)(v >> 8); p[2] = (u8)(v >> 16); p[3] = (u8)(v >> 24); }
 }
 
@@ -79,11 +84,12 @@ static const CwEntry *find_entry(u32 a) {
 
 /* test mode: every call is recorded and returns immediately to lr */
 int cw_test_mode;
+u32 cw_test_lo, cw_test_hi;   /* calls into the tested function's own range run for real */
 u32 cw_test_calls[64][5];
 int cw_test_ncalls;
 
 void cw_call(CwCpu *c, u32 target) {
-    if (cw_test_mode) {
+    if (cw_test_mode && !((target & ~1u) >= cw_test_lo && (target & ~1u) < cw_test_hi)) {
         if (cw_test_ncalls < 64) {
             u32 *rec = cw_test_calls[cw_test_ncalls];
             rec[0] = target & ~1u;
@@ -121,7 +127,8 @@ void cw_undefined(CwCpu *c, u32 addr, u32 insn) {
 
 /* ---- test harness entry (used by cw/recomp/test_recomp.py through ctypes) ---------------- */
 static const CwEntry *find_entry_pub(u32 a) { return find_entry(a); }
-int cw_test_run(CwCpu *c, u32 addr) {
+int cw_test_run(CwCpu *c, u32 addr, u32 lo, u32 hi) {
+    cw_test_lo = lo; cw_test_hi = hi;
     const CwEntry *e = find_entry_pub(addr & ~1u);
     if (!e) return -1;
     cw_test_mode = 1;
